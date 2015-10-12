@@ -8,3 +8,11 @@ dependencies {
     compile 'org.codehaus.groovy:groovy-all:2.4.4'
     testCompile 'junit:junit:4.12'
 }
+
+task normalizeHTML {
+    description = '''replaces every ampersand character with its corresponding XML entity'''
+}
+
+normalizeHTML << {
+    ant.replace(file: 'src/main/resources/kohls-press-realease.html', token: ' & ', value: ' &amp; ')
+}
