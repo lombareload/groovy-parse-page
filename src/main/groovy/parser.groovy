@@ -1,5 +1,93 @@
+import groovy.transform.ToString
+import groovy.util.slurpersupport.GPathResult
+import groovy.xml.MarkupBuilder
+
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+
+File htmlFile = new File('../resources/kohls-press-realease.html')
 
 XmlSlurper slurper = new XmlSlurper(false, false, true)
 slurper.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
-slurper.parse(new File('../resources/kohls-press-realease.html'))
-println(root.xmlns)
+
+GPathResult root = slurper.parse(htmlFile)
+
+def links = root.'body'.div.div.div*.div
+
+ExecutorService pool = Executors.newFixedThreadPool(20)
+
+@ToString
+class PressRelease {
+    String dateStr
+    String relativePDFPath
+    String text
+}
+
+Map years = [:]
+List<PressRelease> currentYear
+links.forEach {GPathResult parentDiv ->
+    def children = parentDiv.children()
+    children.forEach {GPathResult child ->
+        switch (child.name()) {
+            case 'h2':
+                String yearText = child.text()
+                currentYear = []
+                years.put(yearText, currentYear)
+//                println("year = $yearText")
+                break
+            case 'div':
+                child.div.p.forEach {GPathResult p ->
+                    String[] date = p.span.toString().trim().split('/')
+                    String dateStr = "20${date[2]}-${date[0]}-${date[1]}"
+//                    println("dateStr $dateStr")
+                    Path path = Paths.get('www.kohlscorporation.com/PressRoom/', p.a.'@href'.toString())
+                    Path normalizedPath = path.normalize()
+                    String normalizedStr = 'http://' + normalizedPath.toString()
+                    String relativePDFPath = normalizedStr[41..-1]
+                    currentYear.add(new PressRelease(dateStr: dateStr, relativePDFPath: relativePDFPath, text: p.a.text().trim()))
+//                    pool.execute({ ->
+//                        InputStream urlInput = normalizedStr.toURL().openStream()
+//                        Files.copy(urlInput, Paths.get(relativePDFPath), StandardCopyOption.REPLACE_EXISTING)
+//                    })
+//                    println('link ' + normalizedStr)
+                }
+                break
+        }
+    }
+}
+
+//println("years = ${years}")
+
+years.forEach {String key, List<PressRelease> value ->
+//    StringWriter writer = new StringWriter()
+    BufferedWriter writer = Files.newBufferedWriter(Paths.get("../resources/press-release/${key}.xml"), StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW)
+    MarkupBuilder builder = new MarkupBuilder(writer)
+    builder.pressReleases(xmlns: "kohls-press-release") {
+        value.forEach {PressRelease pr ->
+            pressRelease {
+                id {
+                    mkp.yield(pr.relativePDFPath)
+                }
+                link {
+                    mkp.yield(pr.relativePDFPath)
+                }
+                date {
+                    mkp.yield(pr.dateStr)
+                }
+                text {
+                    mkp.yield(pr.text)
+                }
+            }
+        }
+    }
+    writer.flush()
+//    println(writer)
+}
+
+pool.shutdown()
