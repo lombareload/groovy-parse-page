@@ -14,7 +14,7 @@ slurper.setFeature("http://apache.org/xml/features/nonvalidating/load-external-d
 
 GPathResult root = slurper.parse(htmlFile)
 
-def links = root.'body'.div.div.div*.div
+GPathResult links = root.'body'.div.div.div.div
 
 ExecutorService pool = Executors.newFixedThreadPool(20)
 
