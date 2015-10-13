@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<xs:schema attributeFormDefault="unqualified" elementFormDefault="qualified"
+           xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:press="kohls-press-release"
+           xmlns:jaxb="http://java.sun.com/xml/ns/jaxb"
+           jaxb:version="2.0"
+           targetNamespace="kohls-press-release">
+
+    <xs:element name="pressReleases" type="press:PressReleases"/>
+    <xs:complexType name="PressReleases">
+        <xs:sequence>
+            <xs:element name="pressRelease" maxOccurs="unbounded" type="press:PressRelease"/>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="PressRelease">
+        <xs:sequence>
+            <xs:element name="id" type="xs:string"/>
+            <xs:element name="link" type="xs:string"/>
+            <xs:element name="date" type="xs:date"/>
+            <!-- date text is not a field to enter for the data entry -->
+            <xs:element name="dateText" type="xs:string"/>
+            <xs:element name="text" type="xs:string"/>
+            <xs:element name="description" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+</xs:schema>

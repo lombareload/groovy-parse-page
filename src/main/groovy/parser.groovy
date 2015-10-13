@@ -20,6 +20,7 @@ ExecutorService pool = Executors.newFixedThreadPool(20)
 
 @ToString
 class PressRelease {
+    int id
     String dateStr
     String relativePDFPath
     String text
@@ -27,6 +28,7 @@ class PressRelease {
 
 Map years = [:]
 List<PressRelease> currentYear
+int counter = 1
 links.forEach { GPathResult parentDiv ->
     GPathResult children = parentDiv.children()
     children.forEach { GPathResult child ->
@@ -38,13 +40,13 @@ links.forEach { GPathResult parentDiv ->
                 break
             case 'div':
                 child.div.p.forEach { GPathResult p ->
-                    String[] date = p.span.toString().trim().split('/')
-                    String dateStr = "20${date[2]}-${date[0]}-${date[1]}"
+                    int[] date = p.span.toString().trim().split('/').collect {Integer.parseInt(it)}
+                    String dateStr = String.format('20%02d-%02d-%02d', date[2], date[0], date[1])
                     Path path = Paths.get('www.kohlscorporation.com/PressRoom/', p.a.'@href'.toString())
                     Path normalizedPath = path.normalize()
                     String normalizedStr = 'http://' + normalizedPath.toString()
                     String relativePDFPath = normalizedStr[41..-1]
-                    currentYear.add(new PressRelease(dateStr: dateStr, relativePDFPath: relativePDFPath, text: p.a.text().trim()))
+                    currentYear.add(new PressRelease(dateStr: dateStr, relativePDFPath: relativePDFPath, text: p.a.text().trim(), id: counter++))
                     pool.execute({ ->
                         InputStream urlInput = normalizedStr.toURL().openStream()
                         Files.copy(urlInput, Paths.get(relativePDFPath), StandardCopyOption.REPLACE_EXISTING)
@@ -66,7 +68,7 @@ years.forEach { String key, List<PressRelease> value ->
         value.forEach { PressRelease pr ->
             pressRelease {
                 id {
-                    mkp.yield(pr.relativePDFPath)
+                    mkp.yield(counter - pr.id)
                 }
                 link {
                     mkp.yield(pr.relativePDFPath)
