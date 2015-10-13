@@ -2,8 +2,11 @@ import groovy.transform.ToString
 import groovy.util.slurpersupport.GPathResult
 import groovy.xml.MarkupBuilder
 
+import javax.script.ScriptEngine
+import javax.script.ScriptEngineManager
 import java.nio.charset.StandardCharsets
 import java.nio.file.*
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -16,7 +19,7 @@ GPathResult root = slurper.parse(htmlFile)
 
 GPathResult links = root.'body'.div.div.div.div
 
-ExecutorService pool = Executors.newFixedThreadPool(20)
+ExecutorService pool = Executors.newCachedThreadPool()
 
 @ToString
 class PressRelease {
@@ -29,6 +32,8 @@ class PressRelease {
 Map years = [:]
 List<PressRelease> currentYear
 int counter = 1
+CountDownLatch latch
+List<Runnable> runnables = []
 links.forEach { GPathResult parentDiv ->
     GPathResult children = parentDiv.children()
     children.forEach { GPathResult child ->
@@ -45,11 +50,22 @@ links.forEach { GPathResult parentDiv ->
                     Path path = Paths.get('www.kohlscorporation.com/PressRoom/', p.a.'@href'.toString())
                     Path normalizedPath = path.normalize()
                     String normalizedStr = 'http://' + normalizedPath.toString()
-                    String relativePDFPath = normalizedStr[41..-1]
-                    currentYear.add(new PressRelease(dateStr: dateStr, relativePDFPath: relativePDFPath, text: p.a.text().trim(), id: counter++))
-                    pool.execute({ ->
-                        InputStream urlInput = normalizedStr.toURL().openStream()
+                    String relativePDFPath = normalizedStr[42..-1]
+                    currentYear.add(new PressRelease(dateStr: dateStr, relativePDFPath: "/$relativePDFPath", text: p.a.text().trim(), id: counter++))
+
+                    ScriptEngine engine = new ScriptEngineManager().getEngineByName("nashorn")
+                    engine.put("uri", normalizedStr)
+                    String encodedNormalizedStr = engine.eval("encodeURI(uri)")
+
+                    runnables.add({ ->
+                        InputStream urlInput = encodedNormalizedStr.toURL().openStream()
+                        File pdfFile = new File(relativePDFPath)
+                        if (!pdfFile.exists()) {
+                            pdfFile.getParentFile().mkdirs()
+                        }
                         Files.copy(urlInput, Paths.get(relativePDFPath), StandardCopyOption.REPLACE_EXISTING)
+                        latch.countDown()
+                        println("downloaded: $encodedNormalizedStr $latch.count to go")
                     })
                 }
                 break
@@ -85,4 +101,8 @@ years.forEach { String key, List<PressRelease> value ->
     writer.flush()
 }
 
-pool.shutdown()
+latch = new CountDownLatch(counter-1)
+runnables.forEach {pool.execute(it)}
+
+latch.await()
+pool.shutdownNow()
